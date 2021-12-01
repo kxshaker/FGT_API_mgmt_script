@@ -14,3 +14,7 @@ Arguments:
   -id, --id ID          Policy ID Number
   -bk, --backup         Back up global config in current directory
   -k, --key             {Key:value} pair name
+  
+  example: -o port1 port2 port3 port4 port5 -n virtual-wan-link -d dstintf -p -id 10
+           -o port1 port2 port3  -n SASE -d srcintf -A
+           --backup
