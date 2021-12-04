@@ -18,3 +18,5 @@ Arguments:
   example: -o port1 port2 port3 port4 port5 -n virtual-wan-link -d dstintf -p -id 10
            -o port1 port2 port3  -n SASE -d srcintf -A
            --backup
+
+imgs/2021-12-04 10_06_04-cap.png
