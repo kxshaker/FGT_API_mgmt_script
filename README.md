@@ -1,23 +1,24 @@
 # FGT_API
-FGT API MGMT script
+FGT API MGMT script <br/>
 
 Python tool to interact with FGT firewall policy api for now
 
 Arguments:
  
-  -h, --help            show this help message and exit
-  -o, --old             Old Interface name
-  -n, --new             New Interface name
-  -d , --direction      DIRECTION Src/Dst Interface
-  -A, --ALL             All Policies to be updated
-  -p, --policy          One Policy to be updated must use -id if -p switch is used
-  -id, --id ID          Policy ID Number
-  -bk, --backup         Back up global config in current directory
-  -k, --key             {Key:value} pair name
+  -h, --help            show this help message and exit  <br/>
+  -o, --old             Old Interface name  <br/>
+  -n, --new             New Interface name  <br/>
+  -d , --direction      DIRECTION Src/Dst Interface  <br/>
+  -A, --ALL             All Policies to be updated  <br/>
+  -p, --policy          One Policy to be updated must use -id if -p switch is used  <br/>
+  -id, --id ID          Policy ID Number  <br/>
+  -bk, --backup         Back up global config in current directory  <br/>
+  -k, --key             {Key:value} pair name <br/>
   
-  example: -o port1 port2 port3 port4 port5 -n virtual-wan-link -d dstintf -p -id 10
-           -o port1 port2 port3  -n SASE -d srcintf -A
-           --backup
+  example:  <br/>
+  -o port1 port2 port3 port4 port5 -n virtual-wan-link -d dstintf -p -id 10 <br/>
+  -o port1 port2 port3 -n SASE -d srcintf -A <br/>
+  --backup  <br/>
 
 ![2021-12-04 10_06_04-cap](https://user-images.githubusercontent.com/57874692/144706144-7b85b85c-c175-4aa5-bf2d-74fe95884597.png)![2021-12-04 10_07_25-cap](https://user-images.githubusercontent.com/57874692/144706145-c6d98acb-897a-40f8-85a4-0f2cbf7db5b1.png)
 ![2021-12-04 10_21_19-cap](https://user-images.githubusercontent.com/57874692/144706146-bef12279-b46a-4929-8216-0dd6f49f9220.png)
