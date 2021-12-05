@@ -15,7 +15,7 @@ Arguments:
   -bk, --backup         Back up global config in current directory  <br/>
   -k, --key             {Key:value} pair name <br/>
   
-  example:  <br/>
+  example: <br/>
   -o port1 port2 port3 port4 port5 -n virtual-wan-link -d dstintf -p -id 10 <br/>
   -o port1 port2 port3 -n SASE -d srcintf -A <br/>
   --backup  <br/>
