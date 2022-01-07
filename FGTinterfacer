@@ -9,7 +9,6 @@ from FGTmaster import *
 from FGTengine import bcolors as c
 
 
-
 def get_args():
     parser = argparse.ArgumentParser(description="Python tool to interact with FGT firewall policy api")
     
