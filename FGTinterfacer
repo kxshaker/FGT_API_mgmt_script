@@ -1,0 +1,435 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import subprocess
+import pathlib
+import time
+import paramiko
+from FGTmaster import *
+from FGTengine import bcolors as c
+
+
+
+def get_args():
+    parser = argparse.ArgumentParser(description="Python tool to interact with FGT firewall policy api")
+    
+    parser.add_argument("-o", "--old", dest="old", help="Old Interface name",nargs='+' ,default=[])
+    parser.add_argument("-n", "--new", dest="new", help="New Interface name",nargs='+', default=[])
+    parser.add_argument("-d", "--direction", dest="direction", help="Src/Dst Interface")
+    parser.add_argument("-A", "--ALL", dest="all",help="All Policy to be updated", action='store_true')
+    parser.add_argument("-p", "--policy", dest="one",help="one Policy to be updated", action='store_true')
+    parser.add_argument("-id", "--id", dest="id", help="Policy ID Number")
+    
+    parser.add_argument("-k", "--key", dest="key", help="{Key:value} pair, key name")
+    
+    parser.add_argument("-bk", "--backup", dest="backup", help="Back up global config in current directory", action='store_true')
+    parser.add_argument("-rs", "--restore", dest="restore", help="Restore global config from current directory", action='store_true')
+    
+    return parser.parse_args()
+
+fgt = get_args()
+
+#####################################################################################################
+############################################ USER AREA ##############################################
+#####################################################################################################
+# Port<#>/name,service name,enable,disable, etc..., any name as long as its FGT legal               #
+interface_BAD   =   fgt.old         or  ['']
+# Enter desired interface name, any name as long as its FGT legal                                   #
+interface_GOOD  =   fgt.new         or   ''   #
+# Enter Interface direction src or dst, first one is chosen                                         #
+interface_X     =   fgt.direction   or   ''
+# Choose ONLY ONE, Either all_policies OR one_policy to be True                                     #
+all_policies    =   fgt.all         or   False 
+# Choose ONLY ONE, Either all_policies OR one_policy to be True                                     #
+one_policy      =   fgt.one         or   False
+# Key of interface in key value pairs interface js object notation                                  #
+value_key       =   fgt.key         or   'name'      
+# Change only One policy, SET with policy ID Number to work with                                    #
+ID              =   fgt.id          or   None
+#####################################################################################################
+########################################### DEV AREA ################################################
+#####################################################################################################
+start_time      = time.time()                                                                     ###
+timer           =   0           #Set to 0.5 is good can be set to 0 but better safe right         ### 
+vip_timer       =   3           #NEVER SET LOWER THAN 1, for zero errors in [FGT communications]  ### 
+#####################################################################################################
+results_key     =   'results'   #Key of interface in key value pairs interface js object notation ###
+policy_key      =   'policyid'  #Key of interface in key value pairs Policy js object notation    ###
+path_bkup       =   'monitor/system/config/backup'                                                ###
+BAK   = f'execute backup full-config ftp {backUP_name} {ftp_ip} {ftp_u} {ftp_p} {backUP_ENC_pass}'###
+RES   = f'execute restore config ftp {backUP_name} {ftp_ip} {ftp_u} {ftp_p} {backUP_ENC_pass}\n'  ###
+confirm         =   "y"                                                                           ###
+#####################################################################################################
+backup_toggel   =   fgt.backup      or   False                                                    ###
+restore_toggel  =   fgt.restore     or   False                                                    ###
+levelUP         =   False                                     #Dont search deeper variable        ###
+Gameover        =   True                                      #Error check variable               ###
+successful      =   False                                     #Success check variable             ###
+count           =   0                                         #Counter                            ###
+here            =   pathlib.Path().resolve()                                                      ###
+cs              =   c.OKGREEN                                                                     ###
+csr             =   c.FAIL                                                                        ###
+ce              =   c.ENDC                                                                        ###
+#####################################################################################################
+#####################################################################################################
+#####################################################################################################
+
+
+
+def method_GET(arg1 = 0, arg2 = 0, ID = 0):
+    return subprocess.Popen(["python3", "FGTapi.py", "get", f'firewall/policy/{ID}'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+
+
+def method_GET_ALL(arg1 = 0, arg2 = 0, ID = 0):
+    return subprocess.Popen(["python3", "FGTapi.py", "get", f'firewall/policy'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+
+
+def method_PUT(arg1 = 0, arg2 = 0, ID = 0):
+    return subprocess.Popen(["python3", "FGTapi.py", "edit", f'firewall/policy/{ID}', "--data", 
+           ('{"%s":%s}' % (arg2 ,arg1))], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+
+    
+def ftp_serve_on():
+    return subprocess.Popen(["python3", "-m", "pyftpdlib", "-p 7531", "-w", "-u", f'{ftp_u}', "-P", f'{ftp_p}'])
+
+
+
+def ftp_serve_off(ftp):
+    return subprocess.Popen.kill(ftp)
+
+    
+
+def ssh_connect(command):
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    ssh.connect(fgt_ip, ftp_port, fgt_login, fgt_password)
+    if backup_toggel == True:
+        stdin, stdout, stderr = ssh.exec_command(command)
+        lines = stdout.readlines()
+        if 'Return code' in lines[0]:
+            return False
+    elif restore_toggel == True:
+        shell = ssh.invoke_shell()
+        shell.send(command)
+        shell.send(confirm)
+    else:
+        ssh.close()
+    return True
+
+
+
+def check():
+    levelUP = interface_X not in ['srcintf','dstintf','srcaddr','dstaddr','service','comments']
+    return  levelUP
+
+
+
+def clean_data(data_get):
+    out = data_get.communicate()[0]
+    return out.decode('utf-8').replace("'", '"')
+
+
+def line_cutter(cln):
+    cln = cln[:cln.rfind('200 successful request')]
+    return eval(cln.split('\n',1)[-1])
+
+
+
+def results_GET(dictionary):
+    for item in dictionary:
+        if item[0] == results_key:
+            for itm in item:
+                for itm in itm:
+                    if type(itm) == dict:
+                        return itm.items()
+                    
+                    
+
+def intf_GET(sub_dict):
+    interfaces = []
+    for item in sub_dict:
+        if item[0] == interface_X :
+            for item in item[1]:
+                interfaces.append(item)
+                time.sleep(timer)
+            return interfaces
+
+    
+
+def policys_GET(diction):
+    policies_IDs = []
+    for item in diction:
+        if item[0] == results_key:
+            json.dumps(item)
+            for itm in item[1]:
+                for policy in itm:
+                    if policy == policy_key:
+                        policies_IDs.append(itm[policy])
+                        time.sleep(timer)
+    return policies_IDs
+
+
+
+def interface_LIST(id_enum):
+    #Filtering & cleaning dict results 
+    raw          = method_GET(ID=id_enum)
+    cln          = clean_data(raw)
+    data         = json.loads(json.dumps(line_cutter(cln)))
+    dictionary   = data.items()
+    sub_dict     = results_GET(dictionary)
+    interfaces   = intf_GET(sub_dict)
+    return interfaces
+
+
+   
+def correcting_intfs(IDs,intf_bad):
+    interfaces = interface_LIST(IDs)
+    for interface in interfaces:
+        if interface[value_key] == intf_bad:    
+                interface[value_key] = interface_GOOD
+    return interfaces, Gameover
+    
+    
+    
+def new_intfs(IDs,intf_bad):
+    interfaces     = correcting_intfs(IDs,intf_bad)[0]
+    interfaces_NEW = []
+    for interface in interfaces:
+        interfaces_NEW.append(interface)
+        time.sleep(timer)
+    return interfaces_NEW, correcting_intfs(IDs,intf_bad)[1]
+
+
+
+def solo_injeckter(IDs):
+    if len(interface_LIST(IDs)) >= 1:
+        if interface_BAD == item[value_key]:
+            for outgoing_intf in interface_LIST(IDs)[interface_LIST(IDs).index(item)][value_key]:
+                interfaces_NEW = new_intfs(IDs)[0]
+                method_PUT(arg1=json.dumps(interfaces_NEW), arg2=interface_X, ID=IDs)
+                break
+            print(f'[+] Editing {csr}"{interface_BAD}"{ce} & Injecting {cs}"{interface_GOOD}"{ce} @ FGT policyID: {IDs}')
+    return new_intfs(IDs)[1]
+
+
+
+def multi_injeckter(IDs):
+    for intf_bad in interface_BAD:
+        if len(interface_LIST(IDs)) >= 1:
+            if intf_bad == item[value_key or 0]:
+                for outgoing_intf in interface_LIST(IDs)[interface_LIST(IDs).index(item)][value_key]:
+                    if len(interface_GOOD) > 1 and type(interface_GOOD) == list:
+                        interfaces_NEW = new_intfs(IDs,intf_bad)[0]
+                        y = multi_right()
+                        for x in y:
+                            interfaces_NEW.append(x)
+                        method_PUT(arg1=json.dumps(interfaces_NEW), arg2=interface_X, ID=IDs)
+                    else:
+                        interfaces_NEW = new_intfs(IDs,intf_bad)[0]
+                        method_PUT(arg1=json.dumps(interfaces_NEW), arg2=interface_X, ID=IDs)
+                print(f'[+] Removing {csr}"{intf_bad}"{ce} & Injecting {cs}"{interface_GOOD}"{ce} @ FGT policyID: {IDs}')
+    return False
+
+
+
+def multi_right():
+    inject = []
+    for intf_good in interface_GOOD:
+        inject.append({'name': f'{intf_good}', 'q_origin_key': ''})
+    return inject
+
+
+
+def quit_msg():
+    print("\n[-] Quitting hope it's not too late...")
+    return
+
+
+
+def end(scanned):
+    if Gameover   == False:
+        print('------------------------------------------------------------')
+        print(f'{cs}[+] Total {scanned} interfaces scanned: {ce}"{count}" !!!')
+    if successful == False and backup_toggel == True:
+        print(f'{csr}[-] Backup Failed !!!{ce}')
+    if successful == False or Gameover == True:    
+        print(f'{csr}[-] Carefull things can go south real quick --backup first !!!{ce}')
+    return
+
+
+
+def backUP():
+    FTPServer = ftp_serve_on()
+    time.sleep(vip_timer)
+    successful = ssh_connect(BAK)
+    time.sleep(vip_timer)
+    ftp_serve_off(FTPServer)
+    if successful:
+        print(f'{cs}[+] Config backed up @ {ce}{here}/{backUP_name}')
+    else:
+        end(0)
+    return
+
+
+
+def restore_bkup():
+    FTPServer = ftp_serve_on()
+    time.sleep(vip_timer)
+    ssh_connect(RES)
+    time.sleep(vip_timer)
+    ftp_serve_off(FTPServer)
+    print(f'{cs}[+] Config restored from {ce}{here}/{backUP_name}')
+    #with open('bkup.conf', 'w') as f:f.write()
+    return
+
+########################################################################################################
+  
+if backup_toggel == True :
+    backUP()
+    print(f'{cs}[+] Execution time is:{ce} {round(time.time() - start_time,3)} seconds')
+    exit()
+
+
+if restore_toggel == True :
+    restore_bkup()
+    print(f'{cs}[+] Execution time is:{ce} {round(time.time() - start_time,3)} seconds')
+    exit()
+
+########################################################################################################
+levelUP = check()
+if levelUP == False:
+    policies_total  = 0
+    raw_dict        = line_cutter(clean_data(method_GET_ALL()))
+    clean_dict      = raw_dict.items()
+    policies_IDs    = policys_GET(clean_dict)
+
+
+
+    if one_policy or all_policies is True:
+        print('------------------------------------------------------------')
+        print(f'{cs}[+]Policy IDs ordered from top to bottom:{ce}\n{policies_IDs}')
+        print('------------------------------------------------------------')
+
+
+
+    if all_policies is True:
+        try:
+            for IDs in policies_IDs:
+                for item in interface_LIST(IDs):
+
+                    if type(interface_BAD) is str :
+                        Gameover = solo_injeckter(IDs)
+                        count +=1
+                        
+                    elif type(interface_BAD) is list :
+                        Gameover = multi_injeckter(IDs)
+                        count +=1
+                        
+            successful = True
+            
+        except KeyboardInterrupt:
+            quit_msg()
+            
+    elif one_policy is True:
+        try:
+            for item in interface_LIST(ID):
+                if type(interface_BAD) is str :
+                    Gameover = solo_injeckter(ID)
+                    count +=1
+                            
+                elif type(interface_BAD) is list :
+                    Gameover = multi_injeckter(ID)
+                    count +=1
+                    
+            successful = True
+            
+        except KeyboardInterrupt:
+            quit_msg()
+                        
+    if interface_X == 'dstintf':                        
+            end('destination')
+    elif interface_X == 'srcintf':
+        end('source')
+    else: 
+        end(interface_X)
+
+    print(f'{cs}[+] Execution time is:{ce} {round(time.time() - start_time,3)} seconds')
+    exit()
+
+
+    ##################################################################################################
+elif levelUP == True:
+    interface_GOOD = interface_GOOD[0]
+    policies_total  = 0
+    raw_dict        = line_cutter(clean_data(method_GET_ALL()))
+    clean_dict      = raw_dict.items()
+    policies_IDs    = policys_GET(clean_dict)
+
+
+
+    if one_policy or all_policies is True:
+        print('------------------------------------------------------------')
+        print(f'{cs}[+]Policy IDs ordered top to bottom:{ce}\n{policies_IDs}')
+        print('------------------------------------------------------------')
+
+
+    if all_policies is True:
+        try:
+            for IDs in policies_IDs:
+                item = interface_LIST(IDs)
+                byte = ''.join(item)
+                
+                if ''.join(interface_BAD) == byte :
+                    method_PUT(arg1=json.dumps(interface_GOOD), arg2=interface_X, ID=IDs)
+                    print(f'[+] Editing {csr}"{interface_BAD}"{ce} & Injecting {cs}"{interface_GOOD}"{ce} @ FGT policyID: {IDs}')
+                    count +=1
+                    
+                elif type(interface_BAD) is list :
+                    method_PUT(arg1=json.dumps(interface_GOOD), arg2=interface_X, ID=IDs)
+                
+                    count +=1
+                successful = True
+        except KeyboardInterrupt:
+            quit_msg()
+            
+    elif one_policy is True:
+        try:
+            item = interface_LIST(ID)
+            byte = ''.join(item)
+            if ''.join(interface_BAD) == byte :
+                method_PUT(arg1=json.dumps(interface_GOOD), arg2=interface_X, ID=ID)
+                print(f'[+] Editing {csr}"{interface_BAD}"{ce} & Injecting {cs}"{interface_GOOD}"{ce} @ FGT policyID: {ID}')
+                count +=1
+            elif type(interface_BAD) is list :
+                method_PUT(arg1=json.dumps(interface_GOOD), arg2=interface_X, ID=ID)
+                count +=1
+            successful = True
+            
+        except KeyboardInterrupt:
+            quit_msg()
+                        
+    if interface_X == 'dstintf':                        
+            end('destination')
+    elif interface_X == 'srcintf':
+        end('source')
+    else: 
+        end(interface_X)         
+    print(f'{cs}[+] Execution time is:{ce} {round(time.time() - start_time,3)} seconds')
+
+exit()
+    
+    
+
+
+
+
+
+
+
+
+
+
+
